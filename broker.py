@@ -35,7 +35,7 @@ class Broker:
             start_new_thread(self.threaded_client, (client, ))
             global ThreadCount
             ThreadCount += 1
-            print('Thread Number: ' + str(ThreadCount))
+            print('Thread Number: ' + str(ThreadCount) + '.\n')
 
         socket_server.close()
 
@@ -43,31 +43,31 @@ class Broker:
         connection.sendall(str.encode('Server: What do you want to do?'))
         self.determine_what_to_do(connection)
 
-        while True:
+    def determine_what_to_do(self, connection):
+        try:
             data = connection.recv(1024)
             message = data.decode('utf-8')
-            print(connection)
-            reply = 'Server: recieved \'' + message + '\''
-            if not data:
-                connection.sendall(str.encode('Server: Ending communication.\n'))
-                break
-            connection.sendall(str.encode(reply))
-            result = self.determine_what_to_do(connection, message)
-            print(result)
-            connection.sendall(str.encode(result))
-        connection.close()
+        except:
+            print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
 
-    def determine_what_to_do(self, connection):
-        data = connection.recv(1024)
-        message = data.decode('utf-8')
+            self.remove_client_from_clients_list(connection)
+
+            return
 
         if 'Publish' in message:
             self.handle_publisher(connection, message)
-            return
-        elif 'Subscribe' in message:
-            self.handle_subscriber(connection, message)
-            self.subscribers[str(datetime.now())] = connection
-            connection.sendall(str.encode("You are a subscriber."))
+        elif 'active topics' in message:
+            self.handle_subscriber(connection)
+        else:
+            print("\'" + message + "\' is not a valid option. Ending communications with " + ':'.join(map(str,connection.getpeername())) + ".\n")
+
+            self.remove_client_from_clients_list(connection)
+
+            connection.close()
+        
+        self.remove_client_from_clients_list(connection)
+
+        return
 
     def handle_publisher(self, connection, message):
         self.publishers[str(datetime.now())] = connection
@@ -77,9 +77,21 @@ class Broker:
 
         reply = "Server: topic \'" + new_topic.get_name() + "\' has been published."
         print(reply)
-        connection.sendall(str.encode(reply + '\n'))
 
-        self.receive_topic_messages_and_respond(connection)
+        try:
+            connection.sendall(str.encode(reply + '\n'))
+
+            self.receive_topic_messages_and_respond(connection)
+        except:
+            print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+
+            for topic in self.topics.values():
+                if topic.get_publisher() == connection:
+                    topic.set_is_active(False)
+
+            self.remove_client_from_clients_list(connection)
+            self.remove_client_from_publishers_list(connection)
+
         return
 
     def receive_topic_messages_and_respond(self, connection):
@@ -89,32 +101,133 @@ class Broker:
                 specified_topic = topic
 
         while True:
-            data = connection.recv(1024)
-            message = data.decode('utf-8')
-            reply = 'Server: recieved \'' + message + '\' to be published under topic \'' + specified_topic.get_name() + '\'.'
-            if not data:
-                reply = 'Server: Ending communication.\n'
-                connection.sendall(str.encode(reply))
-                break
-            print(reply)
-            connection.sendall(str.encode(reply + '\n'))
+            try: 
+                data = connection.recv(1024)
+                message = data.decode('utf-8')
+            
+                if not data:
+                    reply = 'Server: Ending communication.\n'
+                    connection.sendall(str.encode(reply))
+                    break
+                
+                specified_topic.add_message(message)
+                self.send_message_to_subscribers(specified_topic, message)
 
-            specified_topic.add_message(message)
-            print(specified_topic.get_name() + ' messages: ',end='')
-            print(str(specified_topic.get_messages().values()))
-            print()
+                reply = 'Server: message \'' + message + '\' has been published under topic \'' + specified_topic.get_name() + '\'.'
+                print(reply)
+                connection.sendall(str.encode(reply + '\n'))
+
+                print(specified_topic.get_name() + ' messages: ',end='')
+                print(str(specified_topic.get_messages().values()))
+                print()
+            except:
+                print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+
+                for topic in self.topics.values():
+                    if topic.get_publisher() == connection:
+                        topic.set_is_active(False)
+
+                self.remove_client_from_clients_list(connection)
+                self.remove_client_from_publishers_list(connection)
+
+                break
 
         connection.close()
 
-    def handle_subscriber(self, connection, message):
-        pass
+    def handle_subscriber(self, connection):
+        try:
+            active_topics_list = self.get_active_topics()
+
+            if not active_topics_list:
+                message = 'No active topics found.'
+                print(message)
+                connection.sendall(str.encode(message))
+            else:
+                print('Active topics: ' + ", ".join(self.get_active_topics()))
+                connection.sendall(str.encode('Topics: ' + ", ".join(active_topics_list)))
+
+                topics_list =  self.subscribe_subscriber_to_topics(connection)
+                if type(topics_list) is str:
+                    print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+                    print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+                    print('Unsubscribing ' + ':'.join(subscriber.getpeername()) + 'from any topics and removing from server.\n')
+
+                    self.remove_client_from_clients_list(connection)
+                    self.remove_client_from_subscribers_list(connection)
+                    self.remove_client_from_topics(connection)
+                elif not topics_list:
+                    message = 'No matching topics found. Ending communication'
+                    print(message + 'with ' + ':'.join(map(str,connection.getpeername())) + '.\n')
+                    connection.sendall(str.encode(message + '.'))
+
+                    self.remove_client_from_clients_list(connection)
+                else:
+                    message = 'Client \'' + ':'.join(map(str,connection.getpeername())) + '\' has been subscribed to ' + ', '.join(topics_list) + '.'
+                    print(message + '\n')
+                    connection.sendall(str.encode(message))
+
+                    self.subscribers[str(datetime.now())] = connection
+        except:
+            print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+            
+            self.remove_client_from_clients_list(connection)
+
+    def subscribe_subscriber_to_topics(self, connection):
+        try:
+            data = connection.recv(1024)
+            message = data.decode('utf-8')
+
+            found_topics = []
+
+            if not message == 'No topics specified.':
+                for topic_name in self.separate_str_by_space(message):
+                    for topic in self.topics.values():
+                        if topic_name == topic.get_name():
+                            topic.subscribe_subscriber(connection)
+                            found_topics.append(topic_name)
+
+            return found_topics
+        except:
+            return 'Connection failure'
+
+    def send_message_to_subscribers(self, topic, message):
+        for subscriber in self.subscribers.values():
+            if subscriber in topic.get_subscribers():
+                try:
+                    subscriber.sendall(str.encode('\'' + topic.get_name() + '\': ' + message))
+                except:
+                    print('Cannot connect to ' + ':'.join(subscriber.getpeername()) + '.')
+                    print('Unsubscribing ' + ':'.join(subscriber.getpeername()) + 'from any topics and removing from server.\n')
+
+                    self.remove_client_from_clients_list(subscriber)
+                    self.remove_client_from_subscribers_list(subscriber)
+                    self.remove_client_from_topics(subscriber)
+
+    def remove_client_from_clients_list(self, connection):
+        if connection in self.clients:
+            self.clients.remove(connection)
+
+    def remove_client_from_subscribers_list(self, connection):
+        for key,client in self.subscribers.copy().items():
+            if client == connection:
+                del self.subscribers[key]
+
+    def remove_client_from_publishers_list(self, connection):
+        for key,client in self.publishers.copy().items():
+            if client == connection:
+                del self.publishers[key]
+
+    def remove_client_from_topics(self, connection):
+        for topic in self.topics.values():
+            if connection in topic.get_subscribers():
+                topic.subscribers.remove(connection)
+
+    def get_active_topics(self):
+        topics_list = [ topic.name for topic in self.topics.values() if topic.get_is_active() ]
+        return topics_list
 
     def separate_str_by_space(self, message):
         return message.split(' ')
-
-# def serialize_dict_of_objects(dictionary):
-#     serialized_objects = { key:topic.__dict__ for (key,topic) in dictionary.items() }
-#     return json.dumps(serialized_objects)
 
 def main():
     Broker()

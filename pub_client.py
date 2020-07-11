@@ -15,7 +15,7 @@ class Publisher:
 
         self.topic = input('What is your topic? ')
 
-        print('Waiting for connection')
+        print('Waiting for connection.')
         try:
             client_socket.connect((HOST, PORT))
         except socket.error as e:
@@ -23,19 +23,16 @@ class Publisher:
 
         response = client_socket.recv(1024)
         print(response.decode('utf-8'))
-        print('Publisher: publish ' + self.topic + '\'.')
+        print('Publisher: publish \'' + self.topic + '\'.\n')
 
-        client_socket.send(str.encode('Publish ' + self.topic))
-        response = client_socket.recv(1024)
-        print(response.decode('utf-8'))
+        try:
+            client_socket.send(str.encode('Publish ' + self.topic))
+            response = client_socket.recv(1024)
+            print(response.decode('utf-8'))
 
-        # while True:
-        #     # message = input('Say Something: ')
-
-        #     client_socket.send(str.encode(message))
-        #     response = client_socket.recv(1024)
-        #     print(response.decode('utf-8'))
-        self.send_messages(client_socket)
+            self.send_messages(client_socket)
+        except:
+            print('Connection to server lost.\n')
 
         client_socket.close()
 
@@ -44,9 +41,13 @@ class Publisher:
             message = ''.join(random.choices(string.ascii_uppercase + string.digits, k=random.randint(10, 30)))
             print('Publisher: publish \'' + message + '\' to topic \'' + self.topic + '\'.')
 
-            client_socket.send(str.encode(message))
-            response = client_socket.recv(1024)
-            print(response.decode('utf-8'))
-            time.sleep(random.randint(30, 60))
+            try:
+                client_socket.send(str.encode(message))
+                response = client_socket.recv(1024)
+                print(response.decode('utf-8'))
+                time.sleep(random.randint(30, 60))
+            except:
+                print('Connection to server lost.\n')
+                break
 
 test_pub = Publisher()
