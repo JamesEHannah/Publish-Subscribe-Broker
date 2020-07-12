@@ -13,7 +13,7 @@ class Publisher:
     def publish(self):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        self.topic = input('What is your topic? ')
+        self.topic = input('What is your topic? ').replace(" ", "") # Topic names should not have spaces in them
 
         print('Waiting for connection.')
         try:
@@ -30,11 +30,11 @@ class Publisher:
             response = client_socket.recv(1024)
             print(response.decode('utf-8'))
 
-            self.send_messages(client_socket)
+            self.send_topic_messages(client_socket)
         except:
             print('Connection to server lost.\n')
 
-    def send_messages(self, client_socket):
+    def send_topic_messages(self, client_socket):
         while True:
             message = ''.join(random.choices(string.ascii_uppercase + string.digits, k=random.randint(10, 30)))
             print('Publisher: publish \'' + message + '\' to topic \'' + self.topic + '\'.')
@@ -43,9 +43,9 @@ class Publisher:
                 client_socket.send(str.encode(message))
                 response = client_socket.recv(1024)
                 print(response.decode('utf-8'))
-                time.sleep(random.randint(30, 60))
+                time.sleep(random.randint(30, 60)) # Simulates waiting for messages to be generated
             except:
-                print('Connection to server lost.\n')
+                print('\nConnection to server lost.\n')
                 break
             
         client_socket.close()

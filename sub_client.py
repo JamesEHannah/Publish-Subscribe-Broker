@@ -37,6 +37,7 @@ class Subscriber:
         topics_to_subscribe_to = self.get_topics_input()
 
         if not topics_to_subscribe_to:
+            # Broker will end communications with the subscriber in this case
             message = 'No topics specified.'
             print(message)
             try:
@@ -56,10 +57,12 @@ class Subscriber:
                 print('Connection to server lost.\n')
                 return
 
+            # Allows the subscriber to listen for topic messages while being able to send commands to the broker
             threading.Thread(target=self.listen_for_messages, args=(client_socket,)).start()
 
             while True:
                 try:
+                    # Captilization is important here.
                     message = input('What do you want to do now? (Options: \'Unsub from A B\' / \'Get active topics\' / \'Stop\')\n')
 
                     client_socket.send(str.encode(message))
@@ -79,15 +82,19 @@ class Subscriber:
     def listen_for_messages(self, client_socket):
         while True:
             try:
-                response = client_socket.recv(1024)
-                print('Server: ' + response.decode('utf-8') + '\n')
+                data = client_socket.recv(1024)
+                response = data.decode('utf-8')
+                print('Server: ' + response + '\n')
             except:
                 print('Connection to server lost.\n')
                 break
 
+        client_socket.close() # Important that connection only closes here (Causes error otherwise)
+
     def get_topics_input(self):
         topics_to_subscribe_to = []
 
+        # Captilization for topic names is important. Exact names only.
         topic = input('What topic do you want to subscribe to? (reply \'Exit\' when done) ')
         while not topic.lower() == 'exit':
             topics_to_subscribe_to.append(topic.rstrip('\n'))

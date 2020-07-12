@@ -1,6 +1,6 @@
 # Publish-Subscribe-Broker
 
-Written in Python version 3.7.4
+Written in Python version 3.7.4, no additional installations are necessary.
 
 ## To run Pub-Sub Broker:
 1) Run broker.py first

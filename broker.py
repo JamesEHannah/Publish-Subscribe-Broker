@@ -64,6 +64,8 @@ class Broker:
             self.remove_client_from_clients_list(connection)
 
             connection.close()
+
+            return
         
         self.remove_client_from_clients_list(connection)
 
@@ -113,7 +115,7 @@ class Broker:
                     break
                 
                 specified_topic.add_message(message)
-                self.send_message_to_subscribers(specified_topic, message)
+                self.send_topic_message_to_subscribers(specified_topic, message)
 
                 reply = 'Server: message \'' + message + '\' has been published under topic \'' + specified_topic.get_name() + '\'.'
                 print(reply)
@@ -236,7 +238,7 @@ class Broker:
         except:
             return 'Connection failure'
 
-    def send_message_to_subscribers(self, topic, message):
+    def send_topic_message_to_subscribers(self, topic, message):
         for subscriber in self.subscribers.values():
             if subscriber in topic.get_subscribers():
                 try:
