@@ -183,7 +183,7 @@ class Broker:
                 message = data.decode('utf-8')
                 print('Client \'' + ':'.join(map(str,connection.getpeername())) + '\': ' + message)
 
-                if 'Unsubscribe from' in message:
+                if 'Unsub from' in message:
                     unsubed_topics_list = self.unsubscribe_sub_from_topic(connection, message.split(' ')[2:])
 
                     if not unsubed_topics_list:

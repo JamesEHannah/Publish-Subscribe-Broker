@@ -60,7 +60,7 @@ class Subscriber:
 
             while True:
                 try:
-                    message = input('What do you want to do now? (Options: \'Unsubscribe from A B\' / \'Get active topics\' / \'Stop\')\n')
+                    message = input('What do you want to do now? (Options: \'Unsub from A B\' / \'Get active topics\' / \'Stop\')\n')
 
                     client_socket.send(str.encode(message))
 
