@@ -89,6 +89,8 @@ class Broker:
                 if topic.get_publisher() == connection:
                     topic.set_is_active(False)
 
+                    self.send_inactive_topic_message_to_subs(topic)
+
             self.remove_client_from_clients_list(connection)
             self.remove_client_from_publishers_list(connection)
 
@@ -127,6 +129,8 @@ class Broker:
                     if topic.get_publisher() == connection:
                         topic.set_is_active(False)
 
+                        self.send_inactive_topic_message_to_subs(topic)
+
                 self.remove_client_from_clients_list(connection)
                 self.remove_client_from_publishers_list(connection)
 
@@ -143,18 +147,19 @@ class Broker:
                 print(message)
                 connection.sendall(str.encode(message))
             else:
-                print('Active topics: ' + ", ".join(self.get_active_topics()))
+                print('Active topics: ' + ", ".join(active_topics_list))
                 connection.sendall(str.encode('Topics: ' + ", ".join(active_topics_list)))
 
                 topics_list =  self.subscribe_subscriber_to_topics(connection)
                 if type(topics_list) is str:
                     print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
-                    print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
-                    print('Unsubscribing ' + ':'.join(subscriber.getpeername()) + 'from any topics and removing from server.\n')
+                    print('Unsubscribing ' + ':'.join(map(str,connection.getpeername())) + ' from any topics and removing from server.\n')
 
                     self.remove_client_from_clients_list(connection)
                     self.remove_client_from_subscribers_list(connection)
                     self.remove_client_from_topics(connection)
+
+                    return
                 elif not topics_list:
                     message = 'No matching topics found. Ending communication'
                     print(message + 'with ' + ':'.join(map(str,connection.getpeername())) + '.\n')
@@ -172,6 +177,47 @@ class Broker:
             
             self.remove_client_from_clients_list(connection)
 
+        while True:
+            try:
+                data = connection.recv(1024)
+                message = data.decode('utf-8')
+                print('Client \'' + ':'.join(map(str,connection.getpeername())) + '\': ' + message)
+
+                if 'Unsubscribe from' in message:
+                    unsubed_topics_list = self.unsubscribe_sub_from_topic(connection, message.split(' ')[2:])
+
+                    if not unsubed_topics_list:
+                        reply = 'No topics with any of the specified names found.'
+                    else:
+                        reply = 'Client \'' + ':'.join(map(str,connection.getpeername())) + '\' will be unsubscribed from: ' + ', '.join(unsubed_topics_list) + '.'
+                    
+                    print(reply + '\n')
+                    connection.sendall(str.encode(reply))
+                elif 'Get active topics' in message:
+                    active_topics_list = self.get_active_topics()
+
+                    print('Active topics: ' + ", ".join(active_topics_list) + '\n')
+                    connection.sendall(str.encode('Topics: ' + ", ".join(active_topics_list)))
+                elif 'stop' in message.lower():
+                    reply= 'Client \'' + ':'.join(map(str,connection.getpeername())) + '\' will be set to only receive messages.'
+                    print(reply + '\n')
+                    
+                    connection.sendall(str.encode(reply))
+                    break
+                else:
+                    reply = 'Unrecognized command.'
+                    print(reply + '\n')
+                    connection.sendall(str.encode(reply))
+
+            except:
+                print('Connection to ' + ':'.join(map(str,connection.getpeername())) + ' lost.\n')
+                print('Unsubscribing ' + ':'.join(map(str,connection.getpeername())) + ' from any topics and removing from server.\n')
+
+                self.remove_client_from_clients_list(connection)
+                self.remove_client_from_subscribers_list(connection)
+                self.remove_client_from_topics(connection)
+                break
+
     def subscribe_subscriber_to_topics(self, connection):
         try:
             data = connection.recv(1024)
@@ -182,7 +228,7 @@ class Broker:
             if not message == 'No topics specified.':
                 for topic_name in self.separate_str_by_space(message):
                     for topic in self.topics.values():
-                        if topic_name == topic.get_name():
+                        if topic_name == topic.get_name() and topic.get_is_active():
                             topic.subscribe_subscriber(connection)
                             found_topics.append(topic_name)
 
@@ -196,12 +242,24 @@ class Broker:
                 try:
                     subscriber.sendall(str.encode('\'' + topic.get_name() + '\': ' + message))
                 except:
-                    print('Cannot connect to ' + ':'.join(subscriber.getpeername()) + '.')
-                    print('Unsubscribing ' + ':'.join(subscriber.getpeername()) + 'from any topics and removing from server.\n')
+                    print('Cannot connect to ' + ':'.join(map(str,subscriber.getpeername())) + '.')
+                    print('Unsubscribing ' + ':'.join(map(str,subscriber.getpeername())) + ' from any topics and removing from server.\n')
 
                     self.remove_client_from_clients_list(subscriber)
                     self.remove_client_from_subscribers_list(subscriber)
                     self.remove_client_from_topics(subscriber)
+
+    def unsubscribe_sub_from_topic(self, connection, topic_list):
+        unsubed_topic_list = []
+
+        for topic_name in topic_list:
+            for actual_topic in self.topics.values():
+                if topic_name.lower() == actual_topic.get_name().lower():
+                    if connection in actual_topic.get_subscribers():
+                        actual_topic.subscribers.remove(connection)
+                        unsubed_topic_list.append(actual_topic.get_name())
+
+        return unsubed_topic_list
 
     def remove_client_from_clients_list(self, connection):
         if connection in self.clients:
@@ -221,6 +279,18 @@ class Broker:
         for topic in self.topics.values():
             if connection in topic.get_subscribers():
                 topic.subscribers.remove(connection)
+
+    def send_inactive_topic_message_to_subs(self, topic):
+        for subscriber in topic.get_subscribers():
+            try:
+                subscriber.sendall(str.encode('Topic \'' + topic.get_name() + '\' has become inactive.'))
+            except:
+                print('Cannot connect to ' + ':'.join(map(str,subscriber.getpeername())) + '.')
+                print('Unsubscribing ' + ':'.join(map(str,subscriber.getpeername())) + ' from any topics and removing from server.\n')
+
+                self.remove_client_from_clients_list(subscriber)
+                self.remove_client_from_subscribers_list(subscriber)
+                self.remove_client_from_topics(subscriber)
 
     def get_active_topics(self):
         topics_list = [ topic.name for topic in self.topics.values() if topic.get_is_active() ]

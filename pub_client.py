@@ -34,8 +34,6 @@ class Publisher:
         except:
             print('Connection to server lost.\n')
 
-        client_socket.close()
-
     def send_messages(self, client_socket):
         while True:
             message = ''.join(random.choices(string.ascii_uppercase + string.digits, k=random.randint(10, 30)))
@@ -49,5 +47,7 @@ class Publisher:
             except:
                 print('Connection to server lost.\n')
                 break
+            
+        client_socket.close()
 
 test_pub = Publisher()

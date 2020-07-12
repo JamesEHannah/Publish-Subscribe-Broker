@@ -1,4 +1,5 @@
 import socket
+import threading
 
 HOST = '127.0.0.1'
 PORT = 65432
@@ -32,8 +33,6 @@ class Subscriber:
         except:
             print('Connection to server lost.\n')
 
-        client_socket.close()
-
     def subscribe_to_topics_and_listen_for_messages(self, client_socket):
         topics_to_subscribe_to = self.get_topics_input()
 
@@ -52,26 +51,45 @@ class Subscriber:
                 client_socket.send(str.encode(" ".join(topics_to_subscribe_to)))
 
                 response = client_socket.recv(1024)
-                print('Server: ' + response.decode('utf-8'))
+                print('Server: ' + response.decode('utf-8') + '\n')
             except:
                 print('Connection to server lost.\n')
                 return
 
+            threading.Thread(target=self.listen_for_messages, args=(client_socket,)).start()
+
             while True:
                 try:
+                    message = input('What do you want to do now? (Options: \'Unsubscribe from A B\' / \'Get active topics\' / \'Stop\')\n')
+
+                    client_socket.send(str.encode(message))
+
                     response = client_socket.recv(1024)
                     print('Server: ' + response.decode('utf-8') + '\n')
+
+                    if message.lower() == 'stop':
+                        break
+
                 except:
                     print('Connection to server lost.\n')
                     break
         
         return
 
+    def listen_for_messages(self, client_socket):
+        while True:
+            try:
+                response = client_socket.recv(1024)
+                print('Server: ' + response.decode('utf-8') + '\n')
+            except:
+                print('Connection to server lost.\n')
+                break
+
     def get_topics_input(self):
         topics_to_subscribe_to = []
 
         topic = input('What topic do you want to subscribe to? (reply \'Exit\' when done) ')
-        while not topic == 'Exit':
+        while not topic.lower() == 'exit':
             topics_to_subscribe_to.append(topic.rstrip('\n'))
 
             topic = input('What other topic do you want to subscribe to? (reply \'Exit\' when done) ')
